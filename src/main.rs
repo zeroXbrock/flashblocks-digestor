@@ -9,7 +9,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{error, info, warn};
 use utils::decompress_brotli;
 
-use crate::types::Flashblock;
+use crate::types::{Flashblock, UniV3Events};
 
 #[tokio::main]
 async fn main() {
@@ -96,7 +96,7 @@ fn handle_message(text: &str) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
-            let block_number = fb.metadata.get("block_number").and_then(|v| v.as_u64());
+            let block_number = fb.metadata.as_ref().map(|m| m.block_number);
 
             match block_number {
                 Some(num) => {
@@ -106,9 +106,35 @@ fn handle_message(text: &str) {
                         block_number = num,
                         "Flashblock received"
                     );
-                    println!("Base: {}", fb.base);
-                    if let Some(diff) = fb.diff {
-                        println!("Diff: {}", diff);
+
+                    // Check bloom filter first - skip if no swaps possible
+                    let may_have_swap = fb
+                        .diff
+                        .as_ref()
+                        .map(|d| UniV3Events::from_bloom(&d.logs_bloom).may_have_swap)
+                        .unwrap_or(false);
+
+                    if !may_have_swap {
+                        return;
+                    }
+
+                    // Extract and log swap events
+                    let swaps = fb.extract_swaps();
+                    if !swaps.is_empty() {
+                        info!(count = swaps.len(), "UniV3 Swaps detected");
+                        for swap in &swaps {
+                            info!(
+                                pool = %swap.pool,
+                                sender = %swap.sender,
+                                recipient = %swap.recipient,
+                                amount0 = %swap.amount0,
+                                amount1 = %swap.amount1,
+                                sqrt_price_x96 = %swap.sqrt_price_x96,
+                                liquidity = swap.liquidity,
+                                tick = swap.tick,
+                                "Swap"
+                            );
+                        }
                     }
                 }
                 None => {
