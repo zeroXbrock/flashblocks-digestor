@@ -1,0 +1,16 @@
+[package]
+name = "flashblocks-digestor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tungstenite = "0.24"
+futures-util = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+brotli = "7"
