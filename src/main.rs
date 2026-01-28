@@ -1,15 +1,13 @@
-mod types;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
+use flashblocks_types::{flashblocks::Flashblock, univ3::UniV3Events};
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{error, info, warn};
 use utils::decompress_brotli;
-
-use crate::types::{Flashblock, UniV3Events};
 
 #[tokio::main]
 async fn main() {
@@ -51,7 +49,7 @@ async fn main() {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl-C");
-        info!("Ctrl-C received, shutting down.");
+        warn!("Ctrl-C received, shutting down.");
         done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 

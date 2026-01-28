@@ -1045,11 +1045,9 @@ dependencies = [
 name = "flashblocks-digestor"
 version = "0.1.0"
 dependencies = [
- "alloy-primitives",
- "alloy-rpc-types",
- "alloy-sol-types",
  "brotli",
  "dotenvy",
+ "flashblocks-types",
  "futures-util",
  "serde",
  "serde_json",
@@ -1058,6 +1056,17 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite",
+]
+
+[[package]]
+name = "flashblocks-types"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "alloy-sol-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

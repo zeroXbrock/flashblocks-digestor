@@ -1,19 +1,32 @@
-[package]
-name = "flashblocks-digestor"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
+[workspace.dependencies]
+alloy-primitives = { version = "0.8", features = ["serde"] }
+alloy-sol-types = "0.8"
+alloy-rpc-types = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[package]
+name = "flashblocks-digestor"
+version.workspace = true
+edition.workspace = true
+
 [dependencies]
+flashblocks-types = { path = "crates/flashblocks-types" }
 tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 tungstenite = "0.24"
 futures-util = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde.workspace = true
+serde_json.workspace = true
 dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 brotli = "7"
-alloy-primitives = { version = "0.8", features = ["serde"] }
-alloy-sol-types = "0.8"
-alloy-rpc-types = "0.8"
