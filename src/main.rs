@@ -1,29 +1,15 @@
-use std::io::Read;
+mod types;
+mod utils;
 
-use brotli::Decompressor;
+use std::sync::{Arc, atomic::AtomicBool};
+
 use futures_util::StreamExt;
-use serde::Deserialize;
-use serde_json::Value;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{error, info, warn};
+use utils::decompress_brotli;
 
-// const MAINNET_URL: &str = "wss://mainnet.flashblocks.base.org/ws";
-// const SEPOLIA_URL: &str = "wss://sepolia.flashblocks.base.org/ws";
-
-/// A minimal view of the Flashblock payload so we can print something structured.
-/// Most fields are left as `Value` so you can extend this as needed.
-#[derive(Debug, Deserialize)]
-struct Flashblock {
-    payload_id: String,
-    index: u64,
-    #[serde(default)]
-    metadata: Value,
-    #[serde(default)]
-    base: Value,
-    #[serde(default)]
-    diff: Value,
-}
+use crate::types::Flashblock;
 
 #[tokio::main]
 async fn main() {
@@ -58,8 +44,22 @@ async fn main() {
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
     let (_, mut read) = ws_stream.split();
+    let done = Arc::new(AtomicBool::new(false));
+    let done_clone = done.clone();
+
+    tokio::task::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl-C");
+        info!("Ctrl-C received, shutting down.");
+        done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
 
     while let Some(msg_result) = read.next().await {
+        if done.load(std::sync::atomic::Ordering::SeqCst) {
+            info!("Shutting down stream reader.");
+            break;
+        }
         match msg_result {
             Ok(Message::Text(text)) => {
                 handle_message(&text);
@@ -106,6 +106,10 @@ fn handle_message(text: &str) {
                         block_number = num,
                         "Flashblock received"
                     );
+                    println!("Base: {}", fb.base);
+                    if let Some(diff) = fb.diff {
+                        println!("Diff: {}", diff);
+                    }
                 }
                 None => {
                     info!(
@@ -122,12 +126,4 @@ fn handle_message(text: &str) {
             info!("Raw message: {text}");
         }
     }
-}
-
-/// Decompress a Brotli-compressed byte slice into a UTF-8 string.
-fn decompress_brotli(data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
-    let mut decompressor = Decompressor::new(data, 4096);
-    let mut decompressed = String::new();
-    decompressor.read_to_string(&mut decompressed)?;
-    Ok(decompressed)
 }
