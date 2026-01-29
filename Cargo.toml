@@ -20,6 +20,8 @@ edition.workspace = true
 
 [dependencies]
 flashblocks-types = { path = "crates/flashblocks-types" }
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
 tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 tungstenite = "0.24"

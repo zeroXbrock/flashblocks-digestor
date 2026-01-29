@@ -1,5 +1,4 @@
-use alloy_primitives::{B256, Bloom, BloomInput, Bytes, U256};
-use alloy_rpc_types::Log;
+use alloy_primitives::{Address, B256, Bloom, BloomInput, Bytes, U256};
 use alloy_sol_types::SolEvent;
 use serde::Deserialize;
 use serde_json::Value;
@@ -7,24 +6,62 @@ use std::collections::HashMap;
 
 use crate::univ3::{ParsedSwap, Swap};
 
-/// Receipt data from flashblock metadata
+/// Log entry from receipt
+#[derive(Debug, Deserialize, Clone)]
+pub struct ReceiptLog {
+    pub address: Address,
+    pub data: Bytes,
+    pub topics: Vec<B256>,
+}
+
+/// Inner receipt data (inside the transaction type wrapper)
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FlashblockReceipt {
+pub struct ReceiptInner {
     #[serde(default)]
-    pub logs: Vec<Log>,
+    pub logs: Vec<ReceiptLog>,
     #[serde(default)]
     pub logs_bloom: Option<Bloom>,
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
-    pub gas_used: Option<U256>,
+    pub cumulative_gas_used: Option<String>,
+}
+
+/// Receipt wrapped by transaction type (Eip1559, Legacy, etc.)
+#[derive(Debug, Deserialize)]
+pub enum FlashblockReceipt {
+    Legacy(ReceiptInner),
+    Eip2930(ReceiptInner),
+    Eip1559(ReceiptInner),
+    Eip4844(ReceiptInner),
+    Eip7702(ReceiptInner),
+    /// OP Stack deposit transaction
+    Deposit(ReceiptInner),
 }
 
 impl FlashblockReceipt {
+    /// Get the inner receipt data regardless of transaction type
+    pub fn inner(&self) -> &ReceiptInner {
+        match self {
+            FlashblockReceipt::Legacy(inner)
+            | FlashblockReceipt::Eip2930(inner)
+            | FlashblockReceipt::Eip1559(inner)
+            | FlashblockReceipt::Eip4844(inner)
+            | FlashblockReceipt::Eip7702(inner)
+            | FlashblockReceipt::Deposit(inner) => inner,
+        }
+    }
+
+    /// Get the logs from this receipt
+    pub fn logs(&self) -> &[ReceiptLog] {
+        &self.inner().logs
+    }
+
     /// Check if this receipt might contain a Swap event using its bloom filter
     pub fn may_have_swap(&self) -> bool {
-        self.logs_bloom
+        self.inner()
+            .logs_bloom
             .as_ref()
             .map(|bloom| bloom.contains_input(BloomInput::Hash(Swap::SIGNATURE_HASH)))
             .unwrap_or(true) // If no bloom, assume it might have swaps
@@ -51,7 +88,7 @@ impl FlashblockMetadata {
         self.receipts
             .values()
             .filter(|receipt| receipt.may_have_swap())
-            .flat_map(|receipt| ParsedSwap::extract_all(&receipt.logs))
+            .flat_map(|receipt| ParsedSwap::extract_all(receipt.logs()))
             .collect()
     }
 }

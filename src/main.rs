@@ -2,11 +2,11 @@ mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
-use flashblocks_types::{flashblocks::Flashblock, univ3::UniV3Events};
+use flashblocks_types::flashblocks::Flashblock;
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
 #[tokio::main]
@@ -19,8 +19,8 @@ async fn main() {
         .with_target(false)
         .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
 
@@ -98,28 +98,28 @@ fn handle_message(text: &str) {
 
             match block_number {
                 Some(num) => {
-                    info!(
-                        payload_id = %fb.payload_id,
-                        index = fb.index,
-                        block_number = num,
-                        "Flashblock received"
-                    );
-
-                    // Check bloom filter first - skip if no swaps possible
-                    let may_have_swap = fb
-                        .diff
-                        .as_ref()
-                        .map(|d| UniV3Events::from_bloom(&d.logs_bloom).may_have_swap)
-                        .unwrap_or(false);
-
-                    if !may_have_swap {
-                        return;
+                    // Debug: log flashblock metadata
+                    if let Some(ref meta) = fb.metadata {
+                        let total_logs: usize =
+                            meta.receipts.values().map(|r| r.logs().len()).sum();
+                        debug!(
+                            payload_id = %fb.payload_id,
+                            index = fb.index,
+                            block_number = num,
+                            receipts = meta.receipts.len(),
+                            total_logs = total_logs,
+                            "Flashblock"
+                        );
                     }
 
                     // Extract and log swap events
                     let swaps = fb.extract_swaps();
                     if !swaps.is_empty() {
-                        info!(count = swaps.len(), "UniV3 Swaps detected");
+                        info!(
+                            block_number = num,
+                            count = swaps.len(),
+                            "UniV3 Swaps detected"
+                        );
                         for swap in &swaps {
                             info!(
                                 pool = %swap.pool,
@@ -136,10 +136,10 @@ fn handle_message(text: &str) {
                     }
                 }
                 None => {
-                    info!(
+                    debug!(
                         payload_id = %fb.payload_id,
                         index = fb.index,
-                        "Flashblock received (no metadata.block_number)"
+                        "Flashblock (no block_number)"
                     );
                 }
             }
@@ -147,7 +147,7 @@ fn handle_message(text: &str) {
         Err(e) => {
             // If the schema changes or we get some other message type, dump the raw JSON.
             warn!(error = %e, "Failed to parse Flashblock JSON");
-            info!("Raw message: {text}");
+            debug!("Raw message: {text}");
         }
     }
 }

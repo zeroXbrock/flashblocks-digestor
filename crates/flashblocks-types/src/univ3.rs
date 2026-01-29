@@ -1,6 +1,7 @@
-use alloy_primitives::{Address, Bloom, BloomInput, I256, U160};
-use alloy_rpc_types::Log;
+use alloy_primitives::{Address, Bloom, BloomInput, I256, LogData, U160};
 use alloy_sol_types::{SolEvent, sol};
+
+use crate::flashblocks::ReceiptLog;
 
 // Uniswap V3 Pool events
 sol! {
@@ -113,18 +114,20 @@ pub struct ParsedSwap {
 
 impl ParsedSwap {
     /// Try to decode a Swap event from a log
-    pub fn from_log(log: &Log) -> Option<Self> {
+    pub fn from_log(log: &ReceiptLog) -> Option<Self> {
         // Check if this log matches the Swap event signature
-        let topics = log.topics();
-        if topics.first() != Some(&Swap::SIGNATURE_HASH) {
+        if log.topics.first() != Some(&Swap::SIGNATURE_HASH) {
             return None;
         }
 
-        // Decode the event (convert RPC Log to primitives Log)
-        let decoded = Swap::decode_log(&log.inner, true).ok()?;
+        // Create a LogData for decoding
+        let log_data = LogData::new(log.topics.clone(), log.data.clone())?;
+
+        // Decode the event
+        let decoded = Swap::decode_log_data(&log_data, true).ok()?;
 
         Some(Self {
-            pool: log.address(),
+            pool: log.address,
             sender: decoded.sender,
             recipient: decoded.recipient,
             amount0: decoded.amount0,
@@ -136,7 +139,7 @@ impl ParsedSwap {
     }
 
     /// Extract all Swap events from a list of logs
-    pub fn extract_all(logs: &[Log]) -> Vec<Self> {
+    pub fn extract_all(logs: &[ReceiptLog]) -> Vec<Self> {
         logs.iter().filter_map(Self::from_log).collect()
     }
 }
