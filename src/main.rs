@@ -1,28 +1,30 @@
-mod types;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
+use flashblocks_types::flashblocks::Flashblock;
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
-
-use crate::types::Flashblock;
 
 #[tokio::main]
 async fn main() {
     // Load .env file if present (ignore errors if not found)
     dotenvy::dotenv().ok();
 
-    // Initialize tracing with timestamps
+    // Initialize tracing with timestamps (fixed-width format for aligned logs)
     tracing_subscriber::fmt()
         .with_target(false)
-        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
+            time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]"
+            ),
+        ))
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
 
@@ -51,7 +53,7 @@ async fn main() {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl-C");
-        info!("Ctrl-C received, shutting down.");
+        warn!("Ctrl-C received, shutting down.");
         done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 
@@ -96,26 +98,60 @@ fn handle_message(text: &str) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
-            let block_number = fb.metadata.get("block_number").and_then(|v| v.as_u64());
+            let block_number = fb.metadata.as_ref().map(|m| m.block_number);
 
             match block_number {
                 Some(num) => {
-                    info!(
-                        payload_id = %fb.payload_id,
-                        index = fb.index,
-                        block_number = num,
-                        "Flashblock received"
-                    );
-                    println!("Base: {}", fb.base);
-                    if let Some(diff) = fb.diff {
-                        println!("Diff: {}", diff);
+                    // Debug: log flashblock metadata
+                    if let Some(ref meta) = fb.metadata {
+                        let total_logs: usize =
+                            meta.receipts.values().map(|r| r.logs().len()).sum();
+                        debug!(
+                            payload_id = %fb.payload_id,
+                            index = fb.index,
+                            block_number = num,
+                            receipts = meta.receipts.len(),
+                            total_logs = total_logs,
+                            "Flashblock"
+                        );
+                    }
+
+                    // Extract and log swap events
+                    let swaps = fb.extract_swaps();
+                    if !swaps.is_empty() {
+                        info!(
+                            block_number = num,
+                            count = swaps.len(),
+                            "UniV3 Swaps detected"
+                        );
+                        for swap in &swaps {
+                            debug!(
+                                pool = %swap.pool,
+                                sender = %swap.sender,
+                                recipient = %swap.recipient,
+                                amount0 = %swap.amount0,
+                                amount1 = %swap.amount1,
+                                sqrt_price_x96 = %swap.sqrt_price_x96,
+                                liquidity = swap.liquidity,
+                                tick = swap.tick,
+                                "Swap"
+                            );
+                            let state = swap.pool_state();
+                            info!(
+                                pool = %swap.pool,
+                                tick = state.tick,
+                                price_0_in_1 = %format!("{:.32}", state.price_0_in_1()),
+                                liquidity = state.liquidity,
+                                "Pool state after swap"
+                            );
+                        }
                     }
                 }
                 None => {
-                    info!(
+                    debug!(
                         payload_id = %fb.payload_id,
                         index = fb.index,
-                        "Flashblock received (no metadata.block_number)"
+                        "Flashblock (no block_number)"
                     );
                 }
             }
@@ -123,7 +159,7 @@ fn handle_message(text: &str) {
         Err(e) => {
             // If the schema changes or we get some other message type, dump the raw JSON.
             warn!(error = %e, "Failed to parse Flashblock JSON");
-            info!("Raw message: {text}");
+            debug!("Raw message: {text}");
         }
     }
 }
