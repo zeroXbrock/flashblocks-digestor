@@ -14,10 +14,14 @@ async fn main() {
     // Load .env file if present (ignore errors if not found)
     dotenvy::dotenv().ok();
 
-    // Initialize tracing with timestamps
+    // Initialize tracing with timestamps (fixed-width format for aligned logs)
     tracing_subscriber::fmt()
         .with_target(false)
-        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
+            time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]"
+            ),
+        ))
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
@@ -136,7 +140,7 @@ fn handle_message(text: &str) {
                             info!(
                                 pool = %swap.pool,
                                 tick = state.tick,
-                                price_0_in_1 = state.price_0_in_1(),
+                                price_0_in_1 = %format!("{:.32}", state.price_0_in_1()),
                                 liquidity = state.liquidity,
                                 "Pool state after swap"
                             );
