@@ -15,16 +15,12 @@ pub struct ReceiptLog {
 }
 
 /// Inner receipt data (inside the transaction type wrapper)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiptInner {
-    #[serde(default)]
     pub logs: Vec<ReceiptLog>,
-    #[serde(default)]
     pub logs_bloom: Option<Bloom>,
-    #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
     pub cumulative_gas_used: Option<String>,
 }
 
@@ -69,16 +65,13 @@ impl FlashblockReceipt {
 }
 
 /// Flashblock metadata containing receipts and balance changes
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct FlashblockMetadata {
     /// Transaction receipts keyed by tx hash
-    #[serde(default)]
     pub receipts: HashMap<String, FlashblockReceipt>,
     /// New account balances after this flashblock
-    #[serde(default)]
     pub new_account_balances: HashMap<String, String>,
     /// Block number
-    #[serde(default)]
     pub block_number: u64,
 }
 
