@@ -121,7 +121,7 @@ fn handle_message(text: &str) {
                             "UniV3 Swaps detected"
                         );
                         for swap in &swaps {
-                            info!(
+                            debug!(
                                 pool = %swap.pool,
                                 sender = %swap.sender,
                                 recipient = %swap.recipient,
@@ -131,6 +131,14 @@ fn handle_message(text: &str) {
                                 liquidity = swap.liquidity,
                                 tick = swap.tick,
                                 "Swap"
+                            );
+                            let state = swap.pool_state();
+                            info!(
+                                pool = %swap.pool,
+                                tick = state.tick,
+                                price_0_in_1 = state.price_0_in_1(),
+                                liquidity = state.liquidity,
+                                "Pool state after swap"
                             );
                         }
                     }

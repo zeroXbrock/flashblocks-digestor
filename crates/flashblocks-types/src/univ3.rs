@@ -91,6 +91,60 @@ impl UniV3Events {
     }
 }
 
+/// Partial slot0 data that can be derived from swap events.
+///
+/// The full on-chain slot0 contains:
+/// - sqrtPriceX96: uint160 ✓ (from Swap event)
+/// - tick: int24 ✓ (from Swap event)
+/// - observationIndex: uint16 ✗ (oracle state, needs RPC)
+/// - observationCardinality: uint16 ✗ (oracle state, needs RPC)
+/// - observationCardinalityNext: uint16 ✗ (oracle state, needs RPC)
+/// - feeProtocol: uint8 ✗ (protocol fee, needs RPC)
+/// - unlocked: bool ✗ (reentrancy lock, needs RPC)
+///
+/// Note: `liquidity` is NOT part of slot0 - it's a separate storage variable,
+/// but we include it here since it's emitted in the Swap event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Slot0Partial {
+    /// The current sqrt(price) as a Q64.96 value
+    pub sqrt_price_x96: U160,
+    /// The current tick
+    pub tick: i32,
+}
+
+/// Pool state derived from a Swap event (slot0 + liquidity)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PoolState {
+    /// The current sqrt(price) as a Q64.96 value
+    pub sqrt_price_x96: U160,
+    /// The current tick
+    pub tick: i32,
+    /// The current in-range liquidity (separate from slot0 on-chain)
+    pub liquidity: u128,
+}
+
+impl PoolState {
+    /// Calculate the price of token0 in terms of token1.
+    /// price = (sqrtPriceX96 / 2^96)^2
+    pub fn price_0_in_1(&self) -> f64 {
+        let sqrt_price = self.sqrt_price_x96.to::<u128>() as f64 / (2_u128.pow(96) as f64);
+        sqrt_price * sqrt_price
+    }
+
+    /// Calculate the price of token1 in terms of token0.
+    pub fn price_1_in_0(&self) -> f64 {
+        1.0 / self.price_0_in_1()
+    }
+
+    /// Get just the slot0 portion (sqrtPriceX96 and tick)
+    pub fn slot0(&self) -> Slot0Partial {
+        Slot0Partial {
+            sqrt_price_x96: self.sqrt_price_x96,
+            tick: self.tick,
+        }
+    }
+}
+
 /// A decoded Uniswap V3 Swap event with pool address
 #[derive(Debug, Clone)]
 pub struct ParsedSwap {
@@ -141,5 +195,14 @@ impl ParsedSwap {
     /// Extract all Swap events from a list of logs
     pub fn extract_all(logs: &[ReceiptLog]) -> Vec<Self> {
         logs.iter().filter_map(Self::from_log).collect()
+    }
+
+    /// Get the pool state after this swap (sqrtPriceX96, tick, and liquidity)
+    pub fn pool_state(&self) -> PoolState {
+        PoolState {
+            sqrt_price_x96: self.sqrt_price_x96,
+            tick: self.tick,
+            liquidity: self.liquidity,
+        }
     }
 }
