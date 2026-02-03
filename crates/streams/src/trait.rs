@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::stream::error::StreamError;
+use crate::error::StreamError;
 
 /// A trait to stream data of type T
 pub trait DataStream<T: Serialize> {

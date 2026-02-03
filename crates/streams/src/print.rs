@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::stream::{error::StreamError, r#trait::DataStream};
+use crate::{error::StreamError, r#trait::DataStream};
 
 pub struct PrintStream;
 

@@ -1049,6 +1049,7 @@ dependencies = [
  "alloy-sol-types",
  "brotli",
  "dotenvy",
+ "flashblocks-indexer-streams",
  "flashblocks-types",
  "futures-util",
  "serde",
@@ -1060,6 +1061,22 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tungstenite",
+]
+
+[[package]]
+name = "flashblocks-indexer-streams"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "alloy-sol-types",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
 ]
 
 [[package]]

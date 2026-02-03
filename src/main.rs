@@ -1,4 +1,3 @@
-mod stream;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
@@ -10,10 +9,10 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
-use crate::stream::{DataStream, print::PrintStream};
+use flashblocks_indexer_streams::{DataStream, websocket::WebSocketServer};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load .env file if present (ignore errors if not found)
     dotenvy::dotenv().ok();
 
@@ -38,13 +37,7 @@ async fn main() {
 
     info!("Connecting to Flashblocks WebSocket: {url}");
 
-    let (ws_stream, _) = match connect_async(&url).await {
-        Ok(res) => res,
-        Err(e) => {
-            error!("WebSocket connection error: {e}");
-            return;
-        }
-    };
+    let (ws_stream, _) = connect_async(&url).await?;
 
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
@@ -52,7 +45,9 @@ async fn main() {
     let done = Arc::new(AtomicBool::new(false));
     let done_clone = done.clone();
 
-    let stream = PrintStream;
+    // let stream = PrintStream;
+    let ws_stream = WebSocketServer::with_default_capacity();
+    ws_stream.start("localhost:3000").await?;
 
     tokio::task::spawn(async move {
         tokio::signal::ctrl_c()
@@ -62,6 +57,7 @@ async fn main() {
         done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 
+    info!("parsing flashblocks...");
     while let Some(msg_result) = read.next().await {
         if done.load(std::sync::atomic::Ordering::SeqCst) {
             info!("Shutting down stream reader.");
@@ -69,12 +65,12 @@ async fn main() {
         }
         match msg_result {
             Ok(Message::Text(text)) => {
-                handle_message(&text, &stream);
+                handle_message(&text, &ws_stream);
             }
             Ok(Message::Binary(bin)) => {
                 // Binary frames are Brotli-compressed JSON
                 match decompress_brotli(&bin) {
-                    Ok(text) => handle_message(&text, &stream),
+                    Ok(text) => handle_message(&text, &ws_stream),
                     Err(e) => {
                         warn!("Failed to decompress binary frame: {e}");
                         info!("Binary frame ({} bytes)", bin.len());
@@ -97,6 +93,7 @@ async fn main() {
     }
 
     info!("Stream ended");
+    Ok(())
 }
 
 fn handle_message(text: &str, stream: &impl DataStream<ParsedSwap>) {

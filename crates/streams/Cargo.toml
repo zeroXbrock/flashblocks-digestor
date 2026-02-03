@@ -1,0 +1,16 @@
+[package]
+name = "flashblocks-indexer-streams"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
+alloy-rpc-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
