@@ -20,6 +20,6 @@ pub struct Args {
     pub stream: StreamType,
 
     /// Server address (used with websocket and sse stream types)
-    #[arg(long, default_value = "localhost:3000")]
+    #[arg(long, default_value = "localhost:9001")]
     pub addr: String,
 }

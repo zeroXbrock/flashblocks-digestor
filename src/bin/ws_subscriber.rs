@@ -4,7 +4,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
-const DEFAULT_WS_URL: &str = "ws://127.0.0.1:8080";
+const DEFAULT_WS_URL: &str = "ws://127.0.0.1:9001";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
