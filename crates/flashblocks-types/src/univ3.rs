@@ -1,5 +1,6 @@
 use alloy_primitives::{Address, Bloom, BloomInput, I256, LogData, U160};
 use alloy_sol_types::{SolEvent, sol};
+use serde::Serialize;
 
 use crate::flashblocks::ReceiptLog;
 
@@ -146,7 +147,7 @@ impl PoolState {
 }
 
 /// A decoded Uniswap V3 Swap event with pool address
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ParsedSwap {
     /// The pool contract that emitted the event
     pub pool: Address,

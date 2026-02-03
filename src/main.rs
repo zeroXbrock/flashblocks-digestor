@@ -1,13 +1,16 @@
+mod stream;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
-use flashblocks_types::flashblocks::Flashblock;
+use flashblocks_types::{flashblocks::Flashblock, univ3::ParsedSwap};
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
+
+use crate::stream::{DataStream, print::PrintStream};
 
 #[tokio::main]
 async fn main() {
@@ -49,6 +52,8 @@ async fn main() {
     let done = Arc::new(AtomicBool::new(false));
     let done_clone = done.clone();
 
+    let stream = PrintStream;
+
     tokio::task::spawn(async move {
         tokio::signal::ctrl_c()
             .await
@@ -64,12 +69,12 @@ async fn main() {
         }
         match msg_result {
             Ok(Message::Text(text)) => {
-                handle_message(&text);
+                handle_message(&text, &stream);
             }
             Ok(Message::Binary(bin)) => {
                 // Binary frames are Brotli-compressed JSON
                 match decompress_brotli(&bin) {
-                    Ok(text) => handle_message(&text),
+                    Ok(text) => handle_message(&text, &stream),
                     Err(e) => {
                         warn!("Failed to decompress binary frame: {e}");
                         info!("Binary frame ({} bytes)", bin.len());
@@ -94,7 +99,7 @@ async fn main() {
     info!("Stream ended");
 }
 
-fn handle_message(text: &str) {
+fn handle_message(text: &str, stream: &impl DataStream<ParsedSwap>) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
@@ -144,6 +149,9 @@ fn handle_message(text: &str) {
                                 liquidity = state.liquidity,
                                 "Pool state after swap"
                             );
+                            stream.send_message(&swap).unwrap_or_else(|e| {
+                                error!("Failed to send swap to stream: {}", e);
+                            });
                         }
                     }
                 }
