@@ -1,8 +1,8 @@
 use serde::Serialize;
 
 use crate::{
-    error::StreamError, print::PrintStream, sse::SseServer, r#trait::DataStream,
-    websocket::WebSocketServer,
+    envelope::StreamEnvelope, error::StreamError, print::PrintStream, sse::SseServer,
+    r#trait::DataStream, websocket::WebSocketServer,
 };
 
 /// Enum wrapper for different stream output types
@@ -53,12 +53,20 @@ impl StreamOutput {
     }
 }
 
-impl<T: Serialize> DataStream<T> for StreamOutput {
-    fn send_message(&self, data: &T) -> Result<(), StreamError> {
+impl DataStream for StreamOutput {
+    fn send<T: Serialize>(&self, data_type: &str, data: &T) -> Result<(), StreamError> {
         match self {
-            Self::Print(stream) => stream.send_message(data),
-            Self::WebSocket(stream) => stream.send_message(data),
-            Self::Sse(stream) => stream.send_message(data),
+            Self::Print(stream) => stream.send(data_type, data),
+            Self::WebSocket(stream) => stream.send(data_type, data),
+            Self::Sse(stream) => stream.send(data_type, data),
+        }
+    }
+
+    fn send_envelope<T: Serialize>(&self, envelope: &StreamEnvelope<T>) -> Result<(), StreamError> {
+        match self {
+            Self::Print(stream) => stream.send_envelope(envelope),
+            Self::WebSocket(stream) => stream.send_envelope(envelope),
+            Self::Sse(stream) => stream.send_envelope(envelope),
         }
     }
 }

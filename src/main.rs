@@ -4,7 +4,7 @@ mod utils;
 use std::sync::{Arc, atomic::AtomicBool};
 
 use clap::Parser;
-use flashblocks_types::{flashblocks::Flashblock, univ3::ParsedSwap};
+use flashblocks_types::flashblocks::Flashblock;
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let done = Arc::new(AtomicBool::new(false));
     let done_clone = done.clone();
 
+    // listen for CTRL-C in the background to shutdown gracefully
     tokio::task::spawn(async move {
         tokio::signal::ctrl_c()
             .await
@@ -112,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn handle_message(text: &str, stream: &impl DataStream<ParsedSwap>) {
+fn handle_message(text: &str, stream: &impl DataStream) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
@@ -163,8 +164,8 @@ fn handle_message(text: &str, stream: &impl DataStream<ParsedSwap>) {
                                 "Pool state after swap"
                             );
 
-                            // send swap to stream output
-                            stream.send_message(&swap).unwrap_or_else(|e| {
+                            // send swap to stream output (auto-detects type name)
+                            stream.send("UniV3_swap", swap).unwrap_or_else(|e| {
                                 error!("Failed to send swap to stream: {}", e);
                             });
                         }

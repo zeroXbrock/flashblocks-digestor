@@ -16,7 +16,7 @@ use tokio::{
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
-use crate::{error::StreamError, r#trait::DataStream};
+use crate::{envelope::StreamEnvelope, error::StreamError, r#trait::DataStream};
 
 type ClientId = u64;
 
@@ -115,9 +115,14 @@ impl WebSocketServer {
     }
 }
 
-impl<T: Serialize> DataStream<T> for WebSocketServer {
-    fn send_message(&self, data: &T) -> Result<(), StreamError> {
-        let json = serde_json::to_string(data)
+impl DataStream for WebSocketServer {
+    fn send<T: Serialize>(&self, data_type: &str, data: &T) -> Result<(), StreamError> {
+        let envelope = StreamEnvelope::new(data_type, data);
+        self.send_envelope(&envelope)
+    }
+
+    fn send_envelope<T: Serialize>(&self, envelope: &StreamEnvelope<T>) -> Result<(), StreamError> {
+        let json = serde_json::to_string(envelope)
             .map_err(|e| StreamError::SendError(format!("Failed to serialize data: {}", e)))?;
 
         // Send to all connected clients via broadcast channel
@@ -240,7 +245,7 @@ mod tests {
         };
 
         // Should not error even with no clients
-        let result = server.send_message(&data);
+        let result = server.send_auto(&data);
         assert!(result.is_ok());
     }
 }
