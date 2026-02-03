@@ -1,6 +1,8 @@
 pub mod error;
+pub mod output;
 pub mod print;
 mod r#trait;
 pub mod websocket;
 
+pub use output::StreamOutput;
 pub use r#trait::DataStream;

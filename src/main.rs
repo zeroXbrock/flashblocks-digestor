@@ -2,6 +2,7 @@ mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
+use clap::{Parser, ValueEnum};
 use flashblocks_types::{flashblocks::Flashblock, univ3::ParsedSwap};
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
@@ -9,12 +10,37 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
-use flashblocks_indexer_streams::{DataStream, websocket::WebSocketServer};
+use flashblocks_indexer_streams::{DataStream, StreamOutput};
+
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum StreamType {
+    /// Output to WebSocket server (default)
+    #[default]
+    Websocket,
+    /// Output to stdout
+    Print,
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "flashblocks-digestor")]
+#[command(about = "Digest and stream Flashblocks data")]
+struct Args {
+    /// Stream output type
+    #[arg(short, long, value_enum, default_value_t = StreamType::default())]
+    stream: StreamType,
+
+    /// WebSocket server address (only used with websocket stream type)
+    #[arg(long, default_value = "localhost:3000")]
+    ws_addr: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load .env file if present (ignore errors if not found)
     dotenvy::dotenv().ok();
+
+    // Parse CLI arguments
+    let args = Args::parse();
 
     // Initialize tracing with timestamps (fixed-width format for aligned logs)
     tracing_subscriber::fmt()
@@ -30,24 +56,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    // Choose which network to connect to:
-    // - default: mainnet
-    // - override with `FLASHBLOCKS_WS_URL`
+    // Create stream output based on CLI argument
+    let stream_output = match args.stream {
+        StreamType::Websocket => {
+            info!("Using WebSocket stream output");
+            StreamOutput::websocket()
+        }
+        StreamType::Print => {
+            info!("Using Print stream output");
+            StreamOutput::print()
+        }
+    };
+
+    // Start the stream output (starts WebSocket server if applicable)
+    stream_output.start(&args.ws_addr).await?;
+
     let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
 
     info!("Connecting to Flashblocks WebSocket: {url}");
-
     let (ws_stream, _) = connect_async(&url).await?;
-
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
     let (_, mut read) = ws_stream.split();
     let done = Arc::new(AtomicBool::new(false));
     let done_clone = done.clone();
-
-    // let stream = PrintStream;
-    let ws_stream = WebSocketServer::with_default_capacity();
-    ws_stream.start("localhost:3000").await?;
 
     tokio::task::spawn(async move {
         tokio::signal::ctrl_c()
@@ -65,12 +97,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         match msg_result {
             Ok(Message::Text(text)) => {
-                handle_message(&text, &ws_stream);
+                handle_message(&text, &stream_output);
             }
             Ok(Message::Binary(bin)) => {
                 // Binary frames are Brotli-compressed JSON
                 match decompress_brotli(&bin) {
-                    Ok(text) => handle_message(&text, &ws_stream),
+                    Ok(text) => handle_message(&text, &stream_output),
                     Err(e) => {
                         warn!("Failed to decompress binary frame: {e}");
                         info!("Binary frame ({} bytes)", bin.len());
