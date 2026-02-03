@@ -1,6 +1,9 @@
 use serde::Serialize;
 
-use crate::{error::StreamError, print::PrintStream, r#trait::DataStream, websocket::WebSocketServer};
+use crate::{
+    error::StreamError, print::PrintStream, sse::SseServer, r#trait::DataStream,
+    websocket::WebSocketServer,
+};
 
 /// Enum wrapper for different stream output types
 /// Allows runtime selection of stream implementation
@@ -9,6 +12,8 @@ pub enum StreamOutput {
     Print(PrintStream),
     /// WebSocket server broadcasting to connected clients
     WebSocket(WebSocketServer),
+    /// Server-Sent Events (SSE) server broadcasting to connected clients
+    Sse(SseServer),
 }
 
 impl StreamOutput {
@@ -27,12 +32,23 @@ impl StreamOutput {
         Self::WebSocket(WebSocketServer::new(capacity))
     }
 
+    /// Create a new SSE stream output with default capacity
+    pub fn sse() -> Self {
+        Self::Sse(SseServer::with_default_capacity())
+    }
+
+    /// Create a new SSE stream output with specified capacity
+    pub fn sse_with_capacity(capacity: usize) -> Self {
+        Self::Sse(SseServer::new(capacity))
+    }
+
     /// Start the underlying stream if needed (e.g., WebSocket server)
     /// For PrintStream, this is a no-op
     pub async fn start(&self, addr: &str) -> Result<(), StreamError> {
         match self {
             Self::Print(_) => Ok(()),
             Self::WebSocket(ws) => ws.start(addr).await,
+            Self::Sse(sse) => sse.start(addr).await,
         }
     }
 }
@@ -42,6 +58,7 @@ impl<T: Serialize> DataStream<T> for StreamOutput {
         match self {
             Self::Print(stream) => stream.send_message(data),
             Self::WebSocket(stream) => stream.send_message(data),
+            Self::Sse(stream) => stream.send_message(data),
         }
     }
 }

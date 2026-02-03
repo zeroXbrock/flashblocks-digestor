@@ -1,8 +1,9 @@
+mod args;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use flashblocks_types::{flashblocks::Flashblock, univ3::ParsedSwap};
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
@@ -10,29 +11,8 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
+use crate::args::{Args, StreamType};
 use flashblocks_indexer_streams::{DataStream, StreamOutput};
-
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum StreamType {
-    /// Output to WebSocket server (default)
-    #[default]
-    Websocket,
-    /// Output to stdout
-    Print,
-}
-
-#[derive(Parser, Debug)]
-#[command(name = "flashblocks-digestor")]
-#[command(about = "Digest and stream Flashblocks data")]
-struct Args {
-    /// Stream output type
-    #[arg(short, long, value_enum, default_value_t = StreamType::default())]
-    stream: StreamType,
-
-    /// WebSocket server address (only used with websocket stream type)
-    #[arg(long, default_value = "localhost:3000")]
-    ws_addr: String,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -62,14 +42,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Using WebSocket stream output");
             StreamOutput::websocket()
         }
+        StreamType::Sse => {
+            info!("Using SSE stream output");
+            StreamOutput::sse()
+        }
         StreamType::Print => {
             info!("Using Print stream output");
             StreamOutput::print()
         }
     };
 
-    // Start the stream output (starts WebSocket server if applicable)
-    stream_output.start(&args.ws_addr).await?;
+    // Start the stream output (starts WebSocket/SSE server if applicable)
+    stream_output.start(&args.addr).await?;
 
     let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
 
@@ -178,6 +162,8 @@ fn handle_message(text: &str, stream: &impl DataStream<ParsedSwap>) {
                                 liquidity = state.liquidity,
                                 "Pool state after swap"
                             );
+
+                            // send swap to stream output
                             stream.send_message(&swap).unwrap_or_else(|e| {
                                 error!("Failed to send swap to stream: {}", e);
                             });

@@ -1,6 +1,7 @@
 pub mod error;
 pub mod output;
 pub mod print;
+pub mod sse;
 mod r#trait;
 pub mod websocket;
 
