@@ -40,6 +40,7 @@ brotli = "7"
 clap.workspace = true
 dotenvy = "0.15"
 futures-util.workspace = true
+rayon = "1.10"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::chainlink::{AnswerUpdated, ParsedAnswerUpdated};
 use crate::univ3::{ParsedSwap, Swap};
 
 /// Log entry from receipt
@@ -62,6 +63,15 @@ impl FlashblockReceipt {
             .map(|bloom| bloom.contains_input(BloomInput::Hash(Swap::SIGNATURE_HASH)))
             .unwrap_or(true) // If no bloom, assume it might have swaps
     }
+
+    /// Check if this receipt might contain a Chainlink AnswerUpdated event using its bloom filter
+    pub fn may_have_answer_updated(&self) -> bool {
+        self.inner()
+            .logs_bloom
+            .as_ref()
+            .map(|bloom| bloom.contains_input(BloomInput::Hash(AnswerUpdated::SIGNATURE_HASH)))
+            .unwrap_or(true) // If no bloom, assume it might have updates
+    }
 }
 
 /// Flashblock metadata containing receipts and balance changes
@@ -82,6 +92,15 @@ impl FlashblockMetadata {
             .values()
             .filter(|receipt| receipt.may_have_swap())
             .flat_map(|receipt| ParsedSwap::extract_all(receipt.logs()))
+            .collect()
+    }
+
+    /// Extract all Chainlink AnswerUpdated events from receipts, using bloom filters to skip irrelevant receipts
+    pub fn extract_answer_updates(&self) -> Vec<ParsedAnswerUpdated> {
+        self.receipts
+            .values()
+            .filter(|receipt| receipt.may_have_answer_updated())
+            .flat_map(|receipt| ParsedAnswerUpdated::extract_all(receipt.logs()))
             .collect()
     }
 }
@@ -148,6 +167,14 @@ impl Flashblock {
         self.metadata
             .as_ref()
             .map(|m| m.extract_swaps())
+            .unwrap_or_default()
+    }
+
+    /// Extract all Chainlink AnswerUpdated events from this flashblock's metadata
+    pub fn extract_answer_updates(&self) -> Vec<ParsedAnswerUpdated> {
+        self.metadata
+            .as_ref()
+            .map(|m| m.extract_answer_updates())
             .unwrap_or_default()
     }
 }
