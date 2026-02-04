@@ -8,10 +8,22 @@ edition = "2024"
 
 [workspace.dependencies]
 alloy-primitives = { version = "0.8", features = ["serde"] }
-alloy-sol-types = "0.8"
 alloy-rpc-types = "0.8"
+alloy-sol-types = "0.8"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+thiserror = "2.0.18"
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+tungstenite = "0.24"
 
 [package]
 name = "flashblocks-digestor"
@@ -20,16 +32,25 @@ edition.workspace = true
 
 [dependencies]
 flashblocks-types = { path = "crates/flashblocks-types" }
+flashblocks-indexer-streams = { path = "crates/streams" }
+
 alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
-tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "signal"] }
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
-tungstenite = "0.24"
-futures-util = "0.3"
+brotli = "7"
+clap.workspace = true
+dotenvy = "0.15"
+futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-dotenvy = "0.15"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+thiserror.workspace = true
 time = { version = "0.3", features = ["macros"] }
-brotli = "7"
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tungstenite.workspace = true
+
+[[bin]]
+name = "ws-subscriber"
+path = "src/bin/ws_subscriber.rs"
+

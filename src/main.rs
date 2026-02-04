@@ -1,7 +1,9 @@
+mod args;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
 
+use clap::Parser;
 use flashblocks_types::flashblocks::Flashblock;
 use futures_util::StreamExt;
 use tokio_tungstenite::connect_async;
@@ -9,10 +11,16 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
+use crate::args::{Args, StreamType};
+use flashblocks_indexer_streams::{DataStream, StreamOutput};
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load .env file if present (ignore errors if not found)
     dotenvy::dotenv().ok();
+
+    // Parse CLI arguments
+    let args = Args::parse();
 
     // Initialize tracing with timestamps (fixed-width format for aligned logs)
     tracing_subscriber::fmt()
@@ -28,27 +36,36 @@ async fn main() {
         )
         .init();
 
-    // Choose which network to connect to:
-    // - default: mainnet
-    // - override with `FLASHBLOCKS_WS_URL`
-    let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
-
-    info!("Connecting to Flashblocks WebSocket: {url}");
-
-    let (ws_stream, _) = match connect_async(&url).await {
-        Ok(res) => res,
-        Err(e) => {
-            error!("WebSocket connection error: {e}");
-            return;
+    // Create stream output based on CLI argument
+    let stream_output = match args.stream {
+        StreamType::Websocket => {
+            info!("Using WebSocket stream output");
+            StreamOutput::websocket()
+        }
+        StreamType::Sse => {
+            info!("Using SSE stream output");
+            StreamOutput::sse()
+        }
+        StreamType::Print => {
+            info!("Using Print stream output");
+            StreamOutput::print()
         }
     };
 
+    // Start the stream output (starts WebSocket/SSE server if applicable)
+    stream_output.start(&args.addr).await?;
+
+    let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
+
+    info!("Connecting to Flashblocks WebSocket: {url}");
+    let (ws_stream, _) = connect_async(&url).await?;
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
     let (_, mut read) = ws_stream.split();
     let done = Arc::new(AtomicBool::new(false));
     let done_clone = done.clone();
 
+    // listen for CTRL-C in the background to shutdown gracefully
     tokio::task::spawn(async move {
         tokio::signal::ctrl_c()
             .await
@@ -57,6 +74,7 @@ async fn main() {
         done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 
+    info!("parsing flashblocks...");
     while let Some(msg_result) = read.next().await {
         if done.load(std::sync::atomic::Ordering::SeqCst) {
             info!("Shutting down stream reader.");
@@ -64,12 +82,12 @@ async fn main() {
         }
         match msg_result {
             Ok(Message::Text(text)) => {
-                handle_message(&text);
+                handle_message(&text, &stream_output);
             }
             Ok(Message::Binary(bin)) => {
                 // Binary frames are Brotli-compressed JSON
                 match decompress_brotli(&bin) {
-                    Ok(text) => handle_message(&text),
+                    Ok(text) => handle_message(&text, &stream_output),
                     Err(e) => {
                         warn!("Failed to decompress binary frame: {e}");
                         info!("Binary frame ({} bytes)", bin.len());
@@ -92,9 +110,10 @@ async fn main() {
     }
 
     info!("Stream ended");
+    Ok(())
 }
 
-fn handle_message(text: &str) {
+fn handle_message(text: &str, stream: &impl DataStream) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
@@ -144,6 +163,11 @@ fn handle_message(text: &str) {
                                 liquidity = state.liquidity,
                                 "Pool state after swap"
                             );
+
+                            // send swap to stream output (auto-detects type name)
+                            stream.send("UniV3_swap", swap).unwrap_or_else(|e| {
+                                error!("Failed to send swap to stream: {}", e);
+                            });
                         }
                     }
                 }
