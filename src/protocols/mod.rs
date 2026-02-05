@@ -7,6 +7,7 @@
 
 mod aave;
 mod chainlink;
+mod morpho;
 mod univ3;
 
 use flashblocks_indexer_streams::StreamOutput;
@@ -14,6 +15,7 @@ use flashblocks_types::flashblocks::Flashblock;
 
 pub use aave::AaveHandler;
 pub use chainlink::ChainlinkHandler;
+pub use morpho::MorphoHandler;
 pub use univ3::UniV3Handler;
 
 /// Trait for protocol-specific event extraction and streaming.
@@ -34,8 +36,12 @@ pub trait ProtocolHandler: Send + Sync {
 
 /// All registered protocol handlers.
 /// Add new handlers here to include them in parallel processing.
-pub static ALL_HANDLERS: &[&dyn ProtocolHandler] =
-    &[&UniV3Handler, &ChainlinkHandler, &AaveHandler];
+pub static ALL_HANDLERS: &[&dyn ProtocolHandler] = &[
+    &UniV3Handler,
+    &ChainlinkHandler,
+    &AaveHandler,
+    &MorphoHandler,
+];
 
 /// Process a flashblock through all protocol handlers in parallel.
 pub fn process_all_protocols(fb: &Flashblock, block_number: u64, stream: &StreamOutput) {
