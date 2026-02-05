@@ -4,6 +4,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::aave::{AaveEvents, AaveUserUpdates};
+use crate::chainlink::{AnswerUpdated, ParsedAnswerUpdated};
+use crate::morpho::{MorphoEvents, MorphoUpdates};
 use crate::univ3::{ParsedSwap, Swap};
 
 /// Log entry from receipt
@@ -62,6 +65,33 @@ impl FlashblockReceipt {
             .map(|bloom| bloom.contains_input(BloomInput::Hash(Swap::SIGNATURE_HASH)))
             .unwrap_or(true) // If no bloom, assume it might have swaps
     }
+
+    /// Check if this receipt might contain a Chainlink AnswerUpdated event using its bloom filter
+    pub fn may_have_answer_updated(&self) -> bool {
+        self.inner()
+            .logs_bloom
+            .as_ref()
+            .map(|bloom| bloom.contains_input(BloomInput::Hash(AnswerUpdated::SIGNATURE_HASH)))
+            .unwrap_or(true) // If no bloom, assume it might have updates
+    }
+
+    /// Check if this receipt might contain AAVE user events using its bloom filter
+    pub fn may_have_aave_events(&self) -> bool {
+        self.inner()
+            .logs_bloom
+            .as_ref()
+            .map(|bloom| AaveEvents::from_bloom(bloom).any())
+            .unwrap_or(true) // If no bloom, assume it might have events
+    }
+
+    /// Check if this receipt might contain Morpho events using its bloom filter
+    pub fn may_have_morpho_events(&self) -> bool {
+        self.inner()
+            .logs_bloom
+            .as_ref()
+            .map(|bloom| MorphoEvents::from_bloom(bloom).any())
+            .unwrap_or(true) // If no bloom, assume it might have events
+    }
 }
 
 /// Flashblock metadata containing receipts and balance changes
@@ -83,6 +113,37 @@ impl FlashblockMetadata {
             .filter(|receipt| receipt.may_have_swap())
             .flat_map(|receipt| ParsedSwap::extract_all(receipt.logs()))
             .collect()
+    }
+
+    /// Extract all Chainlink AnswerUpdated events from receipts, using bloom filters to skip irrelevant receipts
+    pub fn extract_answer_updates(&self) -> Vec<ParsedAnswerUpdated> {
+        self.receipts
+            .values()
+            .filter(|receipt| receipt.may_have_answer_updated())
+            .flat_map(|receipt| ParsedAnswerUpdated::extract_all(receipt.logs()))
+            .collect()
+    }
+
+    /// Extract all AAVE user events from receipts, using bloom filters to skip irrelevant receipts
+    pub fn extract_aave_updates(&self) -> AaveUserUpdates {
+        let all_logs: Vec<_> = self
+            .receipts
+            .values()
+            .filter(|receipt| receipt.may_have_aave_events())
+            .flat_map(|receipt| receipt.logs().iter().cloned())
+            .collect();
+        AaveUserUpdates::extract_all(&all_logs)
+    }
+
+    /// Extract all Morpho events from receipts, using bloom filters to skip irrelevant receipts
+    pub fn extract_morpho_updates(&self) -> MorphoUpdates {
+        let all_logs: Vec<_> = self
+            .receipts
+            .values()
+            .filter(|receipt| receipt.may_have_morpho_events())
+            .flat_map(|receipt| receipt.logs().iter().cloned())
+            .collect();
+        MorphoUpdates::extract_all(&all_logs)
     }
 }
 
@@ -148,6 +209,30 @@ impl Flashblock {
         self.metadata
             .as_ref()
             .map(|m| m.extract_swaps())
+            .unwrap_or_default()
+    }
+
+    /// Extract all Chainlink AnswerUpdated events from this flashblock's metadata
+    pub fn extract_answer_updates(&self) -> Vec<ParsedAnswerUpdated> {
+        self.metadata
+            .as_ref()
+            .map(|m| m.extract_answer_updates())
+            .unwrap_or_default()
+    }
+
+    /// Extract all AAVE user events from this flashblock's metadata
+    pub fn extract_aave_updates(&self) -> AaveUserUpdates {
+        self.metadata
+            .as_ref()
+            .map(|m| m.extract_aave_updates())
+            .unwrap_or_default()
+    }
+
+    /// Extract all Morpho events from this flashblock's metadata
+    pub fn extract_morpho_updates(&self) -> MorphoUpdates {
+        self.metadata
+            .as_ref()
+            .map(|m| m.extract_morpho_updates())
             .unwrap_or_default()
     }
 }

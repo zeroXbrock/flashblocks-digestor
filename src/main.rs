@@ -1,4 +1,5 @@
 mod args;
+mod protocols;
 mod utils;
 
 use std::sync::{Arc, atomic::AtomicBool};
@@ -6,19 +7,17 @@ use std::sync::{Arc, atomic::AtomicBool};
 use clap::Parser;
 use flashblocks_types::flashblocks::Flashblock;
 use futures_util::StreamExt;
+use protocols::process_all_protocols;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, info, warn};
 use utils::decompress_brotli;
 
 use crate::args::{Args, StreamType};
-use flashblocks_indexer_streams::{DataStream, StreamOutput};
+use flashblocks_indexer_streams::StreamOutput;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load .env file if present (ignore errors if not found)
-    dotenvy::dotenv().ok();
-
     // Parse CLI arguments
     let args = Args::parse();
 
@@ -55,10 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start the stream output (starts WebSocket/SSE server if applicable)
     stream_output.start(&args.addr).await?;
 
-    let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
+    let url = &args.url;
 
     info!("Connecting to Flashblocks WebSocket: {url}");
-    let (ws_stream, _) = connect_async(&url).await?;
+    let (ws_stream, _) = connect_async(url).await?;
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
     let (_, mut read) = ws_stream.split();
@@ -113,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn handle_message(text: &str, stream: &impl DataStream) {
+fn handle_message(text: &str, stream: &StreamOutput) {
     // First try to parse into our minimal Flashblock struct.
     match serde_json::from_str::<Flashblock>(text) {
         Ok(fb) => {
@@ -135,41 +134,8 @@ fn handle_message(text: &str, stream: &impl DataStream) {
                         );
                     }
 
-                    // Extract and log swap events
-                    let swaps = fb.extract_swaps();
-                    if !swaps.is_empty() {
-                        info!(
-                            block_number = num,
-                            count = swaps.len(),
-                            "UniV3 Swaps detected"
-                        );
-                        for swap in &swaps {
-                            debug!(
-                                pool = %swap.pool,
-                                sender = %swap.sender,
-                                recipient = %swap.recipient,
-                                amount0 = %swap.amount0,
-                                amount1 = %swap.amount1,
-                                sqrt_price_x96 = %swap.sqrt_price_x96,
-                                liquidity = swap.liquidity,
-                                tick = swap.tick,
-                                "Swap"
-                            );
-                            let state = swap.pool_state();
-                            info!(
-                                pool = %swap.pool,
-                                tick = state.tick,
-                                price_0_in_1 = %format!("{:.32}", state.price_0_in_1()),
-                                liquidity = state.liquidity,
-                                "Pool state after swap"
-                            );
-
-                            // send swap to stream output (auto-detects type name)
-                            stream.send("UniV3_swap", swap).unwrap_or_else(|e| {
-                                error!("Failed to send swap to stream: {}", e);
-                            });
-                        }
-                    }
+                    // Process all protocols in parallel
+                    process_all_protocols(&fb, num, stream);
                 }
                 None => {
                     debug!(
