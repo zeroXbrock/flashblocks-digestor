@@ -5,12 +5,14 @@
 //! 2. Implement the `ProtocolHandler` trait
 //! 3. Add the handler to the `ALL_HANDLERS` array in this file
 
+mod aave;
 mod chainlink;
 mod univ3;
 
 use flashblocks_indexer_streams::StreamOutput;
 use flashblocks_types::flashblocks::Flashblock;
 
+pub use aave::AaveHandler;
 pub use chainlink::ChainlinkHandler;
 pub use univ3::UniV3Handler;
 
@@ -32,7 +34,8 @@ pub trait ProtocolHandler: Send + Sync {
 
 /// All registered protocol handlers.
 /// Add new handlers here to include them in parallel processing.
-pub static ALL_HANDLERS: &[&dyn ProtocolHandler] = &[&UniV3Handler, &ChainlinkHandler];
+pub static ALL_HANDLERS: &[&dyn ProtocolHandler] =
+    &[&UniV3Handler, &ChainlinkHandler, &AaveHandler];
 
 /// Process a flashblock through all protocol handlers in parallel.
 pub fn process_all_protocols(fb: &Flashblock, block_number: u64, stream: &StreamOutput) {
