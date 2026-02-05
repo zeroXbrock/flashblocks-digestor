@@ -15,6 +15,10 @@ pub enum StreamType {
 #[command(name = "flashblocks-digestor")]
 #[command(about = "Digest and stream Flashblocks data")]
 pub struct Args {
+    /// Flashblocks WebSocket URL to connect to
+    #[arg(short, long, default_value = "wss://sepolia.flashblocks.base.org/ws")]
+    pub url: String,
+
     /// Stream output type
     #[arg(short, long, value_enum, default_value_t = StreamType::default())]
     pub stream: StreamType,

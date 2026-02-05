@@ -38,7 +38,6 @@ alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 brotli = "7"
 clap.workspace = true
-dotenvy = "0.15"
 futures-util.workspace = true
 rayon = "1.10"
 serde.workspace = true

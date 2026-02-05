@@ -18,9 +18,6 @@ use flashblocks_indexer_streams::StreamOutput;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load .env file if present (ignore errors if not found)
-    dotenvy::dotenv().ok();
-
     // Parse CLI arguments
     let args = Args::parse();
 
@@ -57,10 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start the stream output (starts WebSocket/SSE server if applicable)
     stream_output.start(&args.addr).await?;
 
-    let url = std::env::var("FLASHBLOCKS_WS_URL").expect("missing env var: FLASHBLOCKS_WS_URL");
+    let url = &args.url;
 
     info!("Connecting to Flashblocks WebSocket: {url}");
-    let (ws_stream, _) = connect_async(&url).await?;
+    let (ws_stream, _) = connect_async(url).await?;
     info!("Connected. Streaming Flashblocks… (Ctrl-C to exit)");
 
     let (_, mut read) = ws_stream.split();
