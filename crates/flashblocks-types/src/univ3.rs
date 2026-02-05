@@ -165,6 +165,10 @@ pub struct ParsedSwap {
     pub liquidity: u128,
     /// The tick after the swap
     pub tick: i32,
+    /// Price of token0 in terms of token1
+    pub price_0_in_1: f64,
+    /// Price of token1 in terms of token0
+    pub price_1_in_0: f64,
 }
 
 impl ParsedSwap {
@@ -181,6 +185,13 @@ impl ParsedSwap {
         // Decode the event
         let decoded = Swap::decode_log_data(&log_data, true).ok()?;
 
+        // Build pool state to compute prices
+        let pool_state = PoolState {
+            sqrt_price_x96: decoded.sqrtPriceX96,
+            tick: decoded.tick.as_i32(),
+            liquidity: decoded.liquidity,
+        };
+
         Some(Self {
             pool: log.address,
             sender: decoded.sender,
@@ -190,6 +201,8 @@ impl ParsedSwap {
             sqrt_price_x96: decoded.sqrtPriceX96,
             liquidity: decoded.liquidity,
             tick: decoded.tick.as_i32(),
+            price_0_in_1: pool_state.price_0_in_1(),
+            price_1_in_0: pool_state.price_1_in_0(),
         })
     }
 
