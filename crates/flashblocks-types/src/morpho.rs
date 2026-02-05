@@ -6,6 +6,15 @@ use crate::flashblocks::ReceiptLog;
 
 // Morpho Blue events
 sol! {
+    /// MarketParams struct used by Morpho Blue
+    struct MarketParams {
+        address loanToken;
+        address collateralToken;
+        address oracle;
+        address irm;
+        uint256 lltv;
+    }
+
     /// Emitted when a user supplies assets to a market
     event Supply(
         bytes32 indexed id,
@@ -76,11 +85,7 @@ sol! {
     /// Emitted when a new market is created
     event CreateMarket(
         bytes32 indexed id,
-        address loanToken,
-        address collateralToken,
-        address oracle,
-        address irm,
-        uint256 lltv
+        MarketParams marketParams
     );
 }
 
@@ -502,11 +507,11 @@ impl ParsedMorphoCreateMarket {
         Some(Self {
             morpho: log.address,
             market_id: B256::from(decoded.id),
-            loan_token: decoded.loanToken,
-            collateral_token: decoded.collateralToken,
-            oracle: decoded.oracle,
-            irm: decoded.irm,
-            lltv: decoded.lltv,
+            loan_token: decoded.marketParams.loanToken,
+            collateral_token: decoded.marketParams.collateralToken,
+            oracle: decoded.marketParams.oracle,
+            irm: decoded.marketParams.irm,
+            lltv: decoded.marketParams.lltv,
         })
     }
 
@@ -633,9 +638,19 @@ mod tests {
 
     #[test]
     fn test_create_market_signature() {
+        // MarketParams struct is encoded as a tuple in the event signature
         let expected_sig = alloy_primitives::keccak256(
-            b"CreateMarket(bytes32,address,address,address,address,uint256)",
+            b"CreateMarket(bytes32,(address,address,address,address,uint256))",
         );
+
+        // Print for deep verification
+        println!(
+            "CreateMarket::SIGNATURE_HASH = {:?}",
+            CreateMarket::SIGNATURE_HASH
+        );
+        println!("Expected (keccak256)         = {:?}", expected_sig);
+        println!("CreateMarket::SIGNATURE      = {}", CreateMarket::SIGNATURE);
+
         assert_eq!(CreateMarket::SIGNATURE_HASH, expected_sig);
     }
 
